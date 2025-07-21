@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CodePipeline to deploy to ECS using CodeDeploy on ECR image push
+
+Parameters:
+  AppName:
+    Type: String
+  LabTag:
+    Type: String
+  InfraBucket:
+    Type: String
+    Default: todo-infrastructure
+  CodeDeployApplication:
+    Type: String
+  CodeDeployDeploymentGroup:
+    Type: String
+
+Resources:
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-pipeline-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                Resource:
+                  - !Sub arn:aws:s3:::${InfraBucket}/*
+                  - !Sub arn:aws:s3:::${InfraBucket}
+              - Effect: Allow
+                Action:
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetApplication
+                  - codedeploy:GetApplicationRevision
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentConfig
+                  - codedeploy:RegisterApplicationRevision
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:DescribeImages
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${AppName}-repo
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-pipeline-role
+        - Key: Lab
+          Value: !Ref LabTag
+
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-eventbridge-pipeline-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: TriggerTodoPipelinePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codepipeline:StartPipelineExecution
+                Resource: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${AppName}-pipeline
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-eventbridge-pipeline-role
+        - Key: Lab
+          Value: !Ref LabTag
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${AppName}-pipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref InfraBucket
+      Stages:
+        - Name: SourceFromS3
+          Actions:
+            - Name: SourceFromS3
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: 1
+              Configuration:
+                S3Bucket: !Ref InfraBucket
+                S3ObjectKey: pipeline-files.zip
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+        - Name: DeployToECS
+          Actions:
+            - Name: DeployToECS
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CodeDeploy
+                Version: 1
+              InputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ApplicationName: !Ref CodeDeployApplication
+                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
+              RunOrder: 1
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-pipeline
+        - Key: Lab
+          Value: !Ref LabTag
+
+  ECRPushEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub Trigger pipeline when new image is pushed to ${AppName}-repo
+      EventPattern:
+        source:
+          - aws.ecr
+        detail-type:
+          - ECR Image Action
+        detail:
+          action-type:
+            - PUSH
+          result:
+            - SUCCESS
+          repository-name:
+            - !Sub ${AppName}-repo
+          image-tag:
+            - latest
+      Targets:
+        - Arn: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${AppName}-pipeline
+          Id: codepipeline
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+Outputs:
+  PipelineName:
+    Value: !Ref Pipeline
+    Export:
+      Name: !Sub ${AppName}-pipeline

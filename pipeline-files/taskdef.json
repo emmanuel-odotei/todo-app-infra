@@ -1,0 +1,62 @@
+{
+  "family": "taskly-todo-task",
+  "executionRoleArn": "arn:aws:iam::850995534424:role/taskly-todo-ecs-task-exec-role",
+  "taskRoleArn": "arn:aws:iam::850995534424:role/taskly-todo-ecs-task-exec-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "taskly-todo-container",
+      "image": "850995534424.dkr.ecr.eu-central-1.amazonaws.com/taskly-todo-repo:latest",
+      "portMappings": [
+        {
+          "containerPort": 8082,
+          "hostPort": 8082,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "AWS_REGION",
+          "value": "eu-central-1"
+        },
+        {
+          "name": "DYNAMODB_TABLE",
+          "value": "TasklyTodoItems"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_USERNAME",
+          "valueFrom": "arn:aws:ssm:eu-central-1:850995534424:parameter/taskly-todo/db/username"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:ssm:eu-central-1:850995534424:parameter/taskly-todo/db/password"
+        }
+      ],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/taskly-todo",
+          "awslogs-region": "eu-central-1",
+          "awslogs-create-group": "true",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8082/actuator/health || exit 1"
+        ],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 100
+      }
+    }
+  ]
+}

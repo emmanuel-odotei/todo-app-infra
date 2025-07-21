@@ -1,0 +1,303 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Custom VPC with Public/Private Subnets and Endpoints for ECS Fargate
+
+Parameters:
+  AppName:
+    Type: String
+  LabTag:
+    Type: String
+
+Resources:
+  # VPC
+  TasklyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-vpc
+        - Key: Lab
+          Value: !Ref LabTag
+
+  # VPC Endpoint Security Group
+  VPCEndpointSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC Interface Endpoints
+      VpcId: !Ref TasklyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-vpce-sg
+        - Key: Lab
+          Value: !Ref LabTag
+
+  # Internet Gateway
+  TasklyIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-igw
+        - Key: Lab
+          Value: !Ref LabTag
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref TasklyVPC
+      InternetGatewayId: !Ref TasklyIGW
+
+  # Subnets & Associations
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TasklyVPC
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-public-subnet-1
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TasklyVPC
+      CidrBlock: 10.0.6.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-public-subnet-2
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TasklyVPC
+      CidrBlock: 10.0.7.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-private-subnet-1
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TasklyVPC
+      CidrBlock: 10.0.8.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-private-subnet-2
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TasklyVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-public-rt
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref TasklyIGW
+
+  PublicSubnet1RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Private Subnets Associations
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TasklyVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-private-rt-1
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PrivateSubnet1RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TasklyVPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-private-rt-2
+        - Key: Lab
+          Value: !Ref LabTag
+
+  PrivateSubnet2RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  # S3 VPC Gateway Endpoint
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref TasklyVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable1
+        - !Ref PrivateRouteTable2
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "*"
+            Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-s3-endpoint
+        - Key: Lab
+          Value: !Ref LabTag
+
+  # DynamoDB VPC Gateway Endpoint
+  DynamoDBEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref TasklyVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable1
+        - !Ref PrivateRouteTable2
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: "*"
+            Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-dynamodb-endpoint
+        - Key: Lab
+          Value: !Ref LabTag
+
+  # Interface Endpoint for ECR, ECR DKR (Docker), CloudWatch Logs
+  ECRApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref TasklyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSG.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-ecr-api-endpoint
+        - Key: Lab
+          Value: !Ref LabTag
+
+  # Interface Endpoint for ECR-DKR (Docker)
+  ECRDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref TasklyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSG.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-ecr-docker-endpoint
+        - Key: Lab
+          Value: !Ref LabTag
+  # Interface Endpoint for CloudWatch
+  CWLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref TasklyVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt VPCEndpointSG.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-cw-endpoint
+        - Key: Lab
+          Value: !Ref LabTag
+
+Outputs:
+  VPCId:
+    Value: !Ref TasklyVPC
+    Export:
+      Name: !Sub ${AppName}-vpc
+
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub ${AppName}-public-subnet-1
+
+  PublicSubnet2Id:
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub ${AppName}-public-subnet-2
+
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub ${AppName}-private-subnet-1
+
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub ${AppName}-private-subnet-2
+
+  VPCEndpointSG:
+    Description: SG for VPC Endpoints
+    Value: !Ref VPCEndpointSG
+    Export:
+      Name: !Sub ${AppName}-vpce-sg

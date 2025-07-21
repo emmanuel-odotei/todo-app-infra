@@ -1,0 +1,45 @@
+name: Upload and Deploy CloudFormation Templates
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run CloudFormation Linter
+        uses: scottbrenner/cfn-lint-action@v2
+        with:
+          command: cfn-lint -t templates/*.yaml
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubOIDCRole
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload CloudFormation templates to S3
+        run: |
+          aws s3 cp templates/ s3://${{ secrets.S3_BUCKET_NAME }}/templates/ --recursive --region ${{ secrets.AWS_REGION }}
+
+      - name: Clean previous artifacts
+        run: rm -f pipeline-files.zip
+
+      - name: Package CodeDeploy artifacts
+        run: |
+          cd pipeline-files
+          zip ../pipeline-files.zip appspec.yaml taskdef.json
+
+      - name: Upload CodeDeploy artifacts to S3
+        run: |
+          aws s3 cp pipeline-files.zip s3://${{ secrets.S3_BUCKET_NAME }}/ --region ${{ secrets.AWS_REGION }}

@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Security Groups for infrastructure
+
+Parameters:
+  AppName:
+    Type: String
+  LabTag:
+    Type: String
+  VPCId:
+    Type: AWS::EC2::VPC::Id
+
+Resources:
+  # Application Load Balancer Security Group
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group to Allow HTTP to ALB
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-alb-sg
+        - Key: Lab
+          Value: !Ref LabTag
+
+  # ECS Security Group
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG to Allow ALB to ECS
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8082
+          ToPort: 8082
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-ecs-sg
+        - Key: Lab
+          Value: !Ref LabTag
+
+Outputs:
+  ALBSecurityGroup:
+    Description: SG for Application Load Balancer
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub ${AppName}-alb-sg
+
+  ECSSecurityGroup:
+    Description: SG for ECS Tasks
+    Value: !Ref ECSSecurityGroup
+    Export:
+      Name: !Sub ${AppName}-ecs-sg

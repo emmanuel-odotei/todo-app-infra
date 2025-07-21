@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Root Stack for ECS Java ToDo App with DynamoDB, Auto Scaling, ALB, Code Deploy, Code Pipeline
+
+Parameters:
+  AppName:
+    Type: String
+    Default: taskly-todo
+  LabTag:
+    Type: String
+    Default: week_7_lab
+  TemplateS3BaseURL:
+    Description: "S3 Base URL where templates are stored"
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /taskly-todo/template-base-uri
+  ECRImageUri:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /taskly-todo/image-uri
+  DynamoDBTable:
+    Type: String
+    Default: TasklyTodoItems
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateS3BaseURL}/vpc.yaml"
+      Parameters:
+        AppName: !Ref AppName
+        LabTag: !Ref LabTag
+
+  SecurityGroupsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateS3BaseURL}/securitygroups.yaml"
+      Parameters:
+        AppName: !Ref AppName
+        LabTag: !Ref LabTag
+        VPCId: !GetAtt VPCStack.Outputs.VPCId
+
+  ECSAppStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateS3BaseURL}/ecs-alb.yaml"
+      Parameters:
+        VPCId: !GetAtt VPCStack.Outputs.VPCId
+        PublicSubnet1: !GetAtt VPCStack.Outputs.PublicSubnet1Id
+        PublicSubnet2: !GetAtt VPCStack.Outputs.PublicSubnet2Id
+        PrivateSubnet1: !GetAtt VPCStack.Outputs.PrivateSubnet1Id
+        PrivateSubnet2: !GetAtt VPCStack.Outputs.PrivateSubnet2Id
+        VPCEndpointSG: !GetAtt VPCStack.Outputs.VPCEndpointSG
+        ECSSecurityGroup: !GetAtt SecurityGroupsStack.Outputs.ECSSecurityGroup
+        ALBSecurityGroup: !GetAtt SecurityGroupsStack.Outputs.ALBSecurityGroup
+        DynamoDBTable: !Ref DynamoDBTable
+        AppName: !Ref AppName
+        LabTag: !Ref LabTag
+        ECRImageUri: !Ref ECRImageUri
+
+  CodeDeployStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Delete
+    Properties:
+      TemplateURL: !Sub "${TemplateS3BaseURL}/codedeploy.yaml"
+      Parameters:
+        ClusterName: !GetAtt ECSAppStack.Outputs.ClusterName
+        ServiceName: !GetAtt ECSAppStack.Outputs.ServiceName
+        TargetGroup1: !GetAtt ECSAppStack.Outputs.BlueTargetGroupName
+        TargetGroup2: !GetAtt ECSAppStack.Outputs.GreenTargetGroupName
+        ListenerArn: !GetAtt ECSAppStack.Outputs.ALBListenerArn
+        AppName: !Ref AppName
+        LabTag: !Ref LabTag
+
+  CodePipelineStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${TemplateS3BaseURL}/codepipeline.yaml"
+      Parameters:
+        AppName: !Ref AppName
+        LabTag: !Ref LabTag
+        CodeDeployApplication: !GetAtt CodeDeployStack.Outputs.CodeDeployAppName
+        CodeDeployDeploymentGroup: !GetAtt CodeDeployStack.Outputs.CodeDeployDeploymentGroupName
+
+Outputs:
+  LoadBalancerDNS:
+    Description: ALB DNS to access app
+    Value: !GetAtt ECSAppStack.Outputs.AppLoadBalancerDNS
