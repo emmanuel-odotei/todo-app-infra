@@ -1,7 +1,7 @@
 {
   "family": "taskly-todo-task",
   "executionRoleArn": "arn:aws:iam::850995534424:role/taskly-todo-ecs-task-exec-role",
-  "taskRoleArn": "arn:aws:iam::850995534424:role/taskly-todo-ecs-task-exec-role",
+  "taskRoleArn": "arn:aws:iam::850995534424:role/taskly-todo-ecs-task-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
@@ -25,16 +25,6 @@
         {
           "name": "DYNAMODB_TABLE",
           "value": "TasklyTodoItems"
-        }
-      ],
-      "secrets": [
-        {
-          "name": "DB_USERNAME",
-          "valueFrom": "arn:aws:ssm:eu-central-1:850995534424:parameter/taskly-todo/db/username"
-        },
-        {
-          "name": "DB_PASSWORD",
-          "valueFrom": "arn:aws:ssm:eu-central-1:850995534424:parameter/taskly-todo/db/password"
         }
       ],
       "essential": true,
