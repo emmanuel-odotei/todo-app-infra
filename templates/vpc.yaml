@@ -168,29 +168,6 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable2
 
-  # S3 VPC Gateway Endpoint
-  S3Endpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref TasklyVPC
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
-      VpcEndpointType: Gateway
-      RouteTableIds:
-        - !Ref PrivateRouteTable1
-        - !Ref PrivateRouteTable2
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal: "*"
-            Action: "*"
-            Resource: "*"
-      Tags:
-        - Key: Name
-          Value: !Sub ${AppName}-s3-endpoint
-        - Key: Lab
-          Value: !Ref LabTag
-
   # DynamoDB VPC Gateway Endpoint
   DynamoDBEndpoint:
     Type: AWS::EC2::VPCEndpoint
