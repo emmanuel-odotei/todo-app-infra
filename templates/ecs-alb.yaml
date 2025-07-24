@@ -16,9 +16,6 @@ Parameters:
     Type: AWS::EC2::Subnet::Id
   PrivateSubnet2:
     Type: AWS::EC2::Subnet::Id
-  DynamoDBTable:
-    Description: "Name of the dynamo db table used by the application"
-    Type: String
   VPCEndpointSG:
     Description: "Security Group for VPC endpoints"
     Type: AWS::EC2::SecurityGroup::Id
@@ -190,8 +187,6 @@ Resources:
           Environment:
             - Name: AWS_REGION
               Value: !Ref "AWS::Region"
-            - Name: DYNAMODB_TABLE
-              Value: !Ref DynamoDBTable
           LogConfiguration:
             LogDriver: awslogs
             Options:

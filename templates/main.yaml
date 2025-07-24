@@ -15,9 +15,6 @@ Parameters:
   ECRImageUri:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /taskly-todo/image-uri
-  DynamoDBTable:
-    Type: String
-    Default: TasklyTodoItems
 
 Resources:
   VPCStack:
@@ -50,7 +47,6 @@ Resources:
         VPCEndpointSG: !GetAtt VPCStack.Outputs.VPCEndpointSG
         ECSSecurityGroup: !GetAtt SecurityGroupsStack.Outputs.ECSSecurityGroup
         ALBSecurityGroup: !GetAtt SecurityGroupsStack.Outputs.ALBSecurityGroup
-        DynamoDBTable: !Ref DynamoDBTable
         AppName: !Ref AppName
         LabTag: !Ref LabTag
         ECRImageUri: !Ref ECRImageUri
