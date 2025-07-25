@@ -3,7 +3,7 @@ Resources:
   - TargetService:
       Type: AWS::ECS::Service
       Properties:
-        TaskDefinition: ""
+        TaskDefinition: "arn:aws:ecs:eu-central-1:850995534424:task-definition/taskly-todo-task"
         LoadBalancerInfo:
           ContainerName: taskly-todo-container
           ContainerPort: 8082
