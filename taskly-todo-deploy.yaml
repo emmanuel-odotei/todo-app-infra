@@ -1,0 +1,7 @@
+template-file-path: templates/main.yaml
+parameters:
+  LabTag: week_7_lab
+  ECRImageUri: /taskly-todo/image-uri
+  TemplateS3BaseURL: /taskly-todo/template-base-uri
+  AppName: taskly-todo
+tags: {}
